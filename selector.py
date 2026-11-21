@@ -182,6 +182,10 @@ class Map:
         self.files = d["files"]
         self.reads = {k: int(v, 16) for k, v in d["reads"].items()}
         self.collect = {k: int(v, 16) for k, v in d["collect"].items()}
+        self.pyreads = {k: int(v, 16) for k, v in d.get("pyreads", {}).items()}
+        self.pydirs = {}
+        for k, v in self.pyreads.items():
+            self.pydirs[k.rsplit("/", 1)[0] if "/" in k else ""] = self.pydirs.get(k.rsplit("/", 1)[0] if "/" in k else "", 0) | v
         self.py_collect = {k: int(v, 16) for k, v in d["py_collect"].items()}
         self.mentioned = set(d["mentioned"])
         self.docs = int(d["docs"], 16)
@@ -305,6 +309,11 @@ def analyse_commit(text: str, m: Map) -> int:
         old, new = patch["old"], patch["new"]
         if affects_everything(old) or affects_everything(new):
             return m.all
+        # tests that read Python source text: any touch (even a comment) matters
+        for key in {old, new}:
+            result |= m.pyreads.get(key, 0)
+            if key.endswith(".py") and (patch["status"] != "modify"):
+                result |= m.pydirs.get(key.rsplit("/", 1)[0] if "/" in key else "", 0)
         if patch["status"] == "rename":
             result |= m.all if old.endswith(".py") else 0
         if old.endswith(".py"):
